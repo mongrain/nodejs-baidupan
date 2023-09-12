@@ -1,6 +1,6 @@
 # nodejs-baidupan
 
-> nodejs实现一个百度网盘api的接入，支持 `上传`，`下载服务`
+> nodejs实现一个百度网盘api的接入，支持 `上传`，`下载服务`, 支持 `linux` 操作系统 / `window` 系统下使用 `git-bash` 进行使用
 
 目前仅实现作者使用的功能，如果有其他的功能想要实现，欢迎 `PR` 。
 
@@ -8,7 +8,7 @@
 
 - [ ] 调用 getCode 函数
 - [ ] 调用 getAccessTokenByCode 函数
-- [ ] 调用 upload 函数 
+- [ ] 调用 `uploadByLocal` or `uploadByOss` 函数 
 - [ ] 调用 getFileSource 函数
 
 ### getCode 函数

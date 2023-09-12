@@ -14,7 +14,7 @@ const ROOT_PATH = '/apps/file/'; //网盘路径
 const { CTX } = require('./utils');
 // 获取上下文
 const ctx = CTX.get();
-// 上下文中填写的百度网盘的API_KEY和SECRET_KEY
+// 上下文中填写的百度网盘的 API_KEY 和 SECRET_KEY applist: https://pan.baidu.com/union/console/applist
 const API_KEY = ctx.API_KEY;
 const SECRET_KEY = ctx.SECRET_KEY;
 // device 模式下兑换出来的 code
@@ -87,20 +87,18 @@ function getFileSource(file = '', path = ROOT_PATH) {
 
 /**
  * 上传文件到网盘
- * @param oss
+ * @param {string} cwd 临时文件
+ * @param {string} filename 文件名称
+ * @param {string} filePath 文件目录
+ * @param {string} folderName 临时目录名称
+ * @param {string} folderPath 临时目录目镜
+ * @returns filename 文件名称
  */
-function upload(oss) {
+function doUpload(cwd, filename, filePath, folderName, folderPath) {
   const ctx = CTX.get();
   const ACCESS_TOKEN = ctx.access_token;
-  const href = oss.split('?')[0];
-  const filename = href.slice(href.lastIndexOf('/') + 1);
-  const filePath = path.resolve(__dirname, `./tmp/${filename}`);
-  const cwd = path.resolve(__dirname, './tmp');
-  const folderName = `${filename}.folder`;
-  const folderPath = path.resolve(__dirname, `./tmp/${folderName}`);
 
-  return downloadFile(oss, filePath)
-    .then(() => preUpload(filePath))
+  return preUpload(filePath)
     .then(async (preUploadResult) => {
       for (const block of preUploadResult.block_list) {
         await chunkUpload({ uploadid: preUploadResult.uploadid, partseq: block });
@@ -108,48 +106,6 @@ function upload(oss) {
       return createUpload({ uploadid: preUploadResult.uploadid, block_list: preUploadResult.postData.block_list, size: preUploadResult.postData.size })
     })
     .then(() => filename)
-
-  /**
-   * 下载文件函数
-   * @param {string} ossUrl - OSS 文件地址
-   * @param {string} filePath - 本地保存文件的路径
-   */
-  function downloadFile(ossUrl, filePath) {
-    return new Promise((resolve) => {
-      // 解析 URL
-      const parsedUrl = url.parse(ossUrl);
-
-      // 根据协议创建 HTTP(S) 请求对象
-      const req = parsedUrl.protocol === 'https:' ? https.request(parsedUrl) : http.request(parsedUrl);
-
-      // 处理响应
-      req.on('response', (res) => {
-        if (res.statusCode !== 200) {
-          reject(`下载失败，HTTP 状态码为 ${res.statusCode}`);
-          return;
-        }
-
-        // 创建可写流
-        const fileStream = fs.createWriteStream(filePath);
-
-        // 接收数据并写入文件
-        res.pipe(fileStream);
-
-        // 下载完成时关闭可写流并调用回调函数
-        fileStream.on('close', () => {
-          resolve(null);
-        });
-      });
-
-      // 处理请求错误
-      req.on('error', (err) => {
-        reject(`下载失败，错误信息为 ${err.message}`);
-      });
-
-      // 发送请求
-      req.end();
-    })
-  }
 
   async function preUpload(filePath) {
     const options = {
@@ -271,7 +227,6 @@ function upload(oss) {
 
         stream.on('end', () => {
           const md5 = hash.digest('hex');
-          console.log(md5);
           resolve(md5);
         });
       });
@@ -321,7 +276,6 @@ function upload(oss) {
     };
     request(options, function (error, response) {
       if (error) throw new Error(error);
-      console.log(response.body);
     });
 
   }
@@ -368,6 +322,77 @@ function upload(oss) {
       });
     });
   }
+}
+
+/**
+ * 通过 oss 地址上传到网盘
+ * @param oss
+ */
+function uploadByOss(oss) {
+  const href = oss.split('?')[0];
+  const filename = href.slice(href.lastIndexOf('/') + 1);
+  const filePath = path.resolve(__dirname, `./tmp/${filename}`);
+  const cwd = path.resolve(__dirname, './tmp');
+  const folderName = `${filename}.folder`;
+  const folderPath = path.resolve(__dirname, `./tmp/${folderName}`);
+
+
+  /**
+   * 下载文件函数
+   * @param {string} ossUrl - OSS 文件地址
+   * @param {string} filePath - 本地保存文件的路径
+   */
+  function downloadFile(ossUrl, filePath) {
+    return new Promise((resolve) => {
+      // 解析 URL
+      const parsedUrl = url.parse(ossUrl);
+
+      // 根据协议创建 HTTP(S) 请求对象
+      const req = parsedUrl.protocol === 'https:' ? https.request(parsedUrl) : http.request(parsedUrl);
+
+      // 处理响应
+      req.on('response', (res) => {
+        if (res.statusCode !== 200) {
+          reject(`下载失败，HTTP 状态码为 ${res.statusCode}`);
+          return;
+        }
+
+        // 创建可写流
+        const fileStream = fs.createWriteStream(filePath);
+
+        // 接收数据并写入文件
+        res.pipe(fileStream);
+
+        // 下载完成时关闭可写流并调用回调函数
+        fileStream.on('close', () => {
+          resolve(null);
+        });
+      });
+
+      // 处理请求错误
+      req.on('error', (err) => {
+        reject(`下载失败，错误信息为 ${err.message}`);
+      });
+
+      // 发送请求
+      req.end();
+    })
+  }
+
+  return downloadFile(oss, filePath).then(() => doUpload(cwd, filename, filePath, folderName, folderPath));
+}
+
+/**
+ * 通过本地文件直接上传到网盘
+ *  - 文件必须存放于 tmp 中
+ * @param {string} filename 文件名称
+ */
+function uploadByLocal(filename) {
+  const filePath = path.resolve(__dirname, `./tmp/${filename}`);
+  const cwd = path.resolve(__dirname, './tmp');
+  const folderName = `${filename}.folder`;
+  const folderPath = path.resolve(__dirname, `./tmp/${folderName}`);
+  return doUpload(cwd, filename, filePath, folderName, folderPath)
 }
 
 /**
@@ -446,10 +471,14 @@ function refreshToken() {
 //   "scope": "basic netdisk"
 // }
 // 尝试上传
-// upload('https://www.runoob.com/try/demo_source/movie.mp4');
+// uploadByOss('https://www.runoob.com/try/demo_source/movie.mp4').then(filename => console.log(filename));
 // 得到文件名称 movie.mp4
 // 查看百度地址
-// getFileSource('movie.mp4').then(url => {
-//   console.log('url', url)
-// })
-// 打印 url https://d.pcs.baidu.com/file/ce09092cbl5ebc3b7971e2b2a453ee4d?fid=1582192676-250528-110607584533389&rt=pr&sign=FDtAERV-DCb740ccc5511e5e8fedcff06b081203-RJ965j%2BHMsEhZ3dvXpzFhnBxc9c%3D&expires=8h&chkbd=0&chkv=3&dp-logid=643441440819559584&dp-callid=0&dstime=1682087420&r=146716351&origin_appid=31886974&file_type=0&access_token=126.70dc2a89835ba968d55af582905d9838.Ygk9cAn4bs6AZ_Dy3-OLMuRi_hmwdosYyhu7OSL.w8S5FA
+// getFileSource('movie.mp4').then(url => console.log('url', url))
+// 打印 url https://d.pcs.baidu.com/file/ce09092cbl5ebc3b7971e2b2a453ee4d?fid=1582192676-250528-110607584533389&rt=pr&sign=FDtAERV-DCb740ccc5511e5e8fedcff06b081203-RJ965j%2BHMsEhZ3dvXpzFhnBxc9c%3D&expires=8h&chkbd=0&chkv=3&dp-logid=643441440819559584&dp-callid=0&dstime=1682087420*******************
+
+// 本地文件上传, 文件必须存于 tmp 中
+// uploadByLocal('69905305887161632.mp3').then(filename => console.log(filename));
+// 查看百度地址
+// getFileSource('69905305887161632.mp3').then(url => console.log('url', url))
+// 打印 url https://d.pcs.baidu.com/file/ce09092cbl5ebc3b7971e2b2a453ee4d?fid=1582192676-250528-110607584533389&rt=pr&sign=FDtAERV-DCb740ccc5511e5e8fedcff06b081203-RJ965j%2BHMsEhZ3dvXpzFhnBxc9c%3D&expires=8h&chkbd=0&chkv=3&dp-logid=643441440819559584&dp-callid=0&dstime=1682087420*******************

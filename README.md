@@ -1,4 +1,4 @@
-# Backup-now
+# nodejs-baidupan
 
 > nodejs实现一个百度网盘api的接入，支持 `上传`，`下载服务`
 
